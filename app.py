@@ -1,51 +1,59 @@
+import os
 from flask import Flask, render_template, request, redirect, url_for, session
-from werkzeug.security import generate_password_hash, check_password_hash
-from config import save_config, config
-from db import db
-from models import User
+from flask_sqlalchemy import SQLAlchemy
+from config import save_config, load_config
 
 app = Flask(__name__)
 
-if config:
-    app.secret_key = config['secret_key']
-    app.config['SQLALCHEMY_DATABASE_URI'] = config['database_uri']
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db.init_app(app)
+# Load configuration
+config_data = load_config()
 
+# Initialize the app configurations
+app.secret_key = config_data.get('secret_key', 'super-secret')
+app.config['SQLALCHEMY_DATABASE_URI'] = config_data.get('database_uri', 'sqlite:///site.db')
+
+# Initialize SQLAlchemy
+db = SQLAlchemy(app)
+
+# Define models
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), nullable=False)
+    email = db.Column(db.String(100), nullable=False, unique=True)
+    password = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(10), nullable=False)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
-    if config:
+    if config_data.get('configured'):
         return redirect(url_for('login'))
 
     if request.method == 'POST':
         admin_username = request.form['admin_username']
         admin_email = request.form['admin_email']
-        admin_password = generate_password_hash(request.form['admin_password'])
+        admin_password = request.form['admin_password']
         database_uri = request.form['database_uri']
         secret_key = request.form['secret_key']
 
-        new_config = {
-            "secret_key": secret_key,
-            "database_uri": database_uri
-        }
-        save_config(new_config)
+        config_data['secret_key'] = secret_key
+        config_data['database_uri'] = database_uri
+        config_data['configured'] = True
+        save_config(config_data)
 
         app.secret_key = secret_key
         app.config['SQLALCHEMY_DATABASE_URI'] = database_uri
-        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        db.create_all()
 
-        db.init_app(app)
-        with app.app_context():
-            db.create_all()
-            new_user = User(username=admin_username, email=admin_email, password=admin_password, role='admin')
-            db.session.add(new_user)
-            db.session.commit()
+        new_user = User(username=admin_username, email=admin_email, password=admin_password, role='admin')
+        db.session.add(new_user)
+        db.session.commit()
 
         return redirect(url_for('login'))
 
     return render_template('setup.html')
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -53,48 +61,25 @@ def login():
         email = request.form['email']
         password = request.form['password']
         user = User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password, password):
+        if user and user.password == password:
             session['user_id'] = user.id
             session['username'] = user.username
             session['role'] = user.role
-            if user.role == 'admin':
-                return redirect(url_for('admin'))
-            else:
-                return redirect(url_for('home'))
+            return redirect(url_for('dashboard'))
         else:
-            return "Invalid credentials", 401
+            return 'Invalid credentials'
     return render_template('login.html')
 
-
-@app.route('/')
-def home():
-    return render_template('form.html')
-
-
-@app.route('/admin')
-def admin():
-    if 'role' not in session or session['role'] != 'admin':
+@app.route('/dashboard')
+def dashboard():
+    if 'user_id' in session:
+        return f'Hello, {session["username"]}!'
+    else:
         return redirect(url_for('login'))
-    return render_template('admin.html')
-
-
-@app.route('/set_template', methods=['POST'])
-def set_template():
-    if 'role' not in session or session['role'] != 'admin':
-        return redirect(url_for('login'))
-    # 模板设置的逻辑可以在这里实现
-    return redirect(url_for('admin'))
-
-
-@app.route('/generate_resume', methods=['POST'])
-def generate_resume_route():
-    pass
-
 
 if __name__ == '__main__':
-    if not config:
-        app.run(debug=True)  # 无配置，开放设置页面
+    if not config_data.get('configured'):
+        app.run(debug=True)
     else:
-        with app.app_context():
-            db.create_all()  # 确保存在应用上下文
+        db.create_all()
         app.run(debug=True)
