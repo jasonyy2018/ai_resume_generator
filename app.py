@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_sqlalchemy import SQLAlchemy
 from config import save_config, load_config
+from flask_migrate import Migrate
 
 app = Flask(__name__)
 
@@ -14,6 +15,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = config_data.get('database_uri', 'sqlite:
 
 # Initialize SQLAlchemy
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
 
 # Define models
 class User(db.Model):
@@ -26,6 +29,7 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
+
 @app.route('/setup', methods=['GET', 'POST'])
 def setup():
     if config_data.get('configured'):
@@ -35,8 +39,14 @@ def setup():
         admin_username = request.form['admin_username']
         admin_email = request.form['admin_email']
         admin_password = request.form['admin_password']
-        database_uri = request.form['database_uri']
+        host = request.form['host']
+        port = request.form['port']
+        database = request.form['database']
+        user = request.form['user']
+        password = request.form['password']
         secret_key = request.form['secret_key']
+
+        database_uri = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
 
         config_data['secret_key'] = secret_key
         config_data['database_uri'] = database_uri
@@ -53,7 +63,8 @@ def setup():
 
         return redirect(url_for('login'))
 
-    return render_template('setup.html')
+    return render_template('setup.html', config=config_data)
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -70,12 +81,14 @@ def login():
             return 'Invalid credentials'
     return render_template('login.html')
 
+
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' in session:
         return f'Hello, {session["username"]}!'
     else:
         return redirect(url_for('login'))
+
 
 if __name__ == '__main__':
     if not config_data.get('configured'):
