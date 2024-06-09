@@ -1,2 +1,4 @@
 Flask
-reportlab
+Flask-SQLAlchemy
+Werkzeug
+mysqlclient
