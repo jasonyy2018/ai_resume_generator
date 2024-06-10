@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Resume Generator</title>
+</head>
+<body>
+    <h1>欢迎使用 AI 简历生成器</h1>
+    <form action="/resume/" method="post">
+        {% csrf_token %}
+        <label for="name">姓名:</label>
+        <input type="text" id="name" name="name" required><br><br>
+        <label for="education">教育背景:</label><br>
+        <textarea id="education" name="education" rows="4" cols="50" required></textarea><br><br>
+        <label for="experience">工作经历:</label><br>
+        <textarea id="experience" name="experience" rows="4" cols="50" required></textarea><br><br>
+        <label for="skills">技能:</label><br>
+        <textarea id="skills" name="skills" rows="4" cols="50" required></textarea><br><br>
+        <input type="submit" value="生成简历">
+    </form>
+</body>
+</html>
